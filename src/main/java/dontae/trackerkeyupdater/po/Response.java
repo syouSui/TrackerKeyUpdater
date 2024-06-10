@@ -1,4 +1,4 @@
-package vip.acrocyber.trackerkeyupdater.po;
+package dontae.trackerkeyupdater.po;
 
 import lombok.Data;
 import lombok.experimental.Accessors;
