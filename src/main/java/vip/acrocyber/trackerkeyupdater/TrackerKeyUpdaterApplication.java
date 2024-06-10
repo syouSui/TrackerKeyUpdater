@@ -8,17 +8,25 @@ import org.springframework.http.client.support.BasicAuthenticationInterceptor;
 import org.springframework.web.client.RestTemplate;
 import vip.acrocyber.trackerkeyupdater.po.Response;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
-
 
 public class TrackerKeyUpdaterApplication {
     private static final RestTemplate restTemplate          = new RestTemplate();
     private static final ObjectMapper objectMapper          = new ObjectMapper();
-    private static       HttpHeaders  headers               = new HttpHeaders();
     private static final String       SUCCESS_FLAG          = "success";
     private static final String       ERROR_TRACKER_CONTENT = "Tracker gave HTTP response code 403 (Forbidden)";
+    private static       HttpHeaders  headers               = new HttpHeaders();
+    private static       String       url;
+    private static       String       passkey;
+    private static       String       username;
+    private static       String       password;
+    private static       String       authorization;
+    private static       String       sessionId;
 
     private static final Predicate<ResponseEntity<Response>> isResponseOk =
             response -> HttpStatus.OK.equals(response.getStatusCode()) &&
@@ -28,7 +36,7 @@ public class TrackerKeyUpdaterApplication {
     private static String generateFormData(Response.Arguments.Torrent torrent, String passkey) {
         String tracker = torrent.getTrackerStats().get(0).getAnnounce();
         return String.format("""
-                                     {"method":"torrent-set","arguments":{"ids":%d,"trackerReplace":[0,"%s?passkey: %s"]},"tag":""}
+                                     {"method":"torrent-set","arguments":{"ids":%d,"trackerReplace":[0,"%s?passkey=%s"]},"tag":""}
                                      """,
                              torrent.getId(),
                              tracker.substring(0, tracker.indexOf("?")),
@@ -48,67 +56,104 @@ public class TrackerKeyUpdaterApplication {
                 List.of();
     }
 
-    private static Boolean modifyAnnounce(String url, String payload) {
+    private static Boolean modifyAnnounceByRest(String url, String payload) {
         ResponseEntity<Response> responseEntity = restTemplate.postForEntity(
                 url,
                 new HttpEntity<>(payload, headers),
                 Response.class);
-        // TODO invalid argument
         return isResponseOk.test(responseEntity);
+    }
+
+    private static Boolean modifyAnnounceByCurl(String url, String payload) {
+        System.out.println("----------------------" + payload);
+        String[] command = {
+                "curl",
+                url,
+                "-H", "Authorization: " + authorization,
+                "-H", MediaType.APPLICATION_FORM_URLENCODED_VALUE,
+                "-H", "X-Transmission-Session-Id: " + sessionId,
+                "--data-raw", payload
+        };
+
+        Boolean res = true;
+
+        try {
+            // 使用 ProcessBuilder 执行命令
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            Process        process        = processBuilder.start();
+
+            // 读取命令执行的输出
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String         line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+
+            // 读取命令执行的错误输出
+            BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            while ((line = errorReader.readLine()) != null) {
+                res = false;
+                System.err.println(line);
+            }
+
+            // 等待命令执行完毕
+            int exitCode = process.waitFor();
+            System.out.println("Exit code: " + exitCode);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return res;
     }
 
     private static void handler(String url, String passkey) {
         listTorrents(url).parallelStream()
                          .filter(t -> ERROR_TRACKER_CONTENT.equals(t.getErrorString()))
                          .forEach(t -> {
-                             Boolean res = modifyAnnounce(url, generateFormData(t, passkey));
+                             Boolean res = modifyAnnounceByRest(url, generateFormData(t, passkey));
                              System.out.println(res + " " + t.getName());
                          });
     }
 
-    private static void runner(String[] args) {
-        try {
-            CommandLine cmd = new DefaultParser()
-                    .parse(new Options().addOption("url", true, "URL参数")
-                                        .addOption("passkey", true, "passkey")
-                                        .addOption("username", true, "用户参数")
-                                        .addOption("password", true, "密码参数"),
-                           args);
-
-            String url      = cmd.getOptionValue("url");
-            String passkey  = cmd.getOptionValue("passkey");
-            String username = cmd.getOptionValue("username");
-            String password = cmd.getOptionValue("password");
-
+    private static void init(String[] args) {
+        Consumer<String[]> argsInitFun = s -> {
+            try {
+                CommandLine cmd = new DefaultParser()
+                        .parse(new Options().addOption("url", true, "URL参数")
+                                            .addOption("passkey", true, "passkey")
+                                            .addOption("username", true, "用户参数")
+                                            .addOption("password", true, "密码参数")
+                                            .addOption("Authorization", true, "Authorization")
+                                            .addOption("X-Transmission-Session-Id", true, "X-Transmission-Session-Id"),
+                               args);
+                url           = cmd.getOptionValue("url");
+                passkey       = cmd.getOptionValue("passkey");
+                username      = cmd.getOptionValue("username");
+                password      = cmd.getOptionValue("password");
+                authorization = cmd.getOptionValue("Authorization");
+                sessionId     = cmd.getOptionValue("X-Transmission-Session-Id");
+            } catch (ParseException e) {
+                System.out.println("命令行参数解析失败: " + e);
+            }
+        };
+        Runnable restInitFun = () -> {
             restTemplate.getInterceptors().add(new BasicAuthenticationInterceptor(username, password));
 
-            handler(url, passkey);
-
-        } catch (ParseException e) {
-            System.out.println("命令行参数解析失败: " + e);
-        }
-    }
-
-    private static void init() {
-//            headers.set("Authorization", "Basic " + Base64.getEncoder().encodeToString(password.getBytes()));
-        headers.set("Authorization", "Basic UFQ2NjY2NjY6UFQ2NjY2NjY=");
-        headers.set("XMLHttpRequest", "XMLHttpRequest");
-        headers.set("X-Transmission-Session-Id", "Z4kYQsAqH0Qal7gdGls7XYtrjvyDMLNlCVvsgnSYqnL347J8");
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            headers.set("Authorization", authorization);
+            headers.set("XMLHttpRequest", "XMLHttpRequest");
+            headers.set("X-Transmission-Session-Id", sessionId);
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        };
+        argsInitFun.accept(args);
+        restInitFun.run();
     }
 
     public static void main(String[] args) {
-        // TODO temp args
-        args = new String[]{
-                "-url", "https://tr.acrocyber.vip:8/transmission/rpc",
-                "-passkey", "968d343a2b8641c64bb1dedb134e4323",
-                "-username", "PT666666",
-                "-password", "PT666666"};
-
-        init();
-
         System.out.println(Arrays.toString(args));
 
-        runner(args);
+        init(args);
+
+        handler(url, passkey);
     }
 }
