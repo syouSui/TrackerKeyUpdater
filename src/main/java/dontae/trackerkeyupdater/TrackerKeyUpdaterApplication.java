@@ -1,15 +1,11 @@
 package dontae.trackerkeyupdater;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import dontae.trackerkeyupdater.po.Response;
 import org.apache.commons.cli.*;
 import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.http.*;
 import org.springframework.http.client.support.BasicAuthenticationInterceptor;
 import org.springframework.web.client.RestTemplate;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
@@ -17,7 +13,6 @@ import java.util.function.Predicate;
 
 public class TrackerKeyUpdaterApplication {
     private static final RestTemplate restTemplate          = new RestTemplate();
-    private static final ObjectMapper objectMapper          = new ObjectMapper();
     private static final String       SUCCESS_FLAG          = "success";
     private static final String       ERROR_TRACKER_CONTENT = "Tracker gave HTTP response code 403 (Forbidden)";
     private static       HttpHeaders  headers               = new HttpHeaders();
@@ -25,7 +20,6 @@ public class TrackerKeyUpdaterApplication {
     private static       String       passkey;
     private static       String       username;
     private static       String       password;
-    private static       String       authorization;
     private static       String       sessionId;
 
     private static final Predicate<ResponseEntity<Response>> isResponseOk =
@@ -73,43 +67,56 @@ public class TrackerKeyUpdaterApplication {
                          });
     }
 
-    private static void init(String[] args) {
+    private static void initHeaders(String url) {
+        restTemplate.getInterceptors().add(new BasicAuthenticationInterceptor(username, password));
+        headers.set("XMLHttpRequest", "XMLHttpRequest");
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        try {
+            restTemplate.postForObject(url,
+                                       new HttpEntity<>("", headers),
+                                       String.class);
+        } catch (Exception e) {
+            if (e.getMessage().contains("409 Conflict")) {
+                String $sessionId = e.getMessage()
+                                     .substring(e.getMessage().indexOf("X-Transmission-Session-Id: ") + 27,
+                                                e.getMessage().indexOf("</code>"));
+                System.out.println("Extract X-Transmission-Session-Id is: " + $sessionId);
+                sessionId = $sessionId;
+            } else {
+                throw e;
+            }
+        }
+
+        headers.set("X-Transmission-Session-Id", sessionId);
+    }
+
+    private static void initArgs(String[] args) {
         Consumer<String[]> argsInitFun = s -> {
             try {
                 CommandLine cmd = new DefaultParser()
                         .parse(new Options().addOption("url", true, "URL参数")
                                             .addOption("passkey", true, "passkey")
                                             .addOption("username", true, "用户参数")
-                                            .addOption("password", true, "密码参数")
-                                            .addOption("Authorization", true, "Authorization")
-                                            .addOption("XTransmissionSessionId", true, "X-Transmission-Session-Id"),
+                                            .addOption("password", true, "密码参数"),
                                args);
                 url           = cmd.getOptionValue("url");
                 passkey       = cmd.getOptionValue("passkey");
                 username      = cmd.getOptionValue("username");
                 password      = cmd.getOptionValue("password");
-                authorization = cmd.getOptionValue("Authorization");
-                sessionId     = cmd.getOptionValue("XTransmissionSessionId");
             } catch (ParseException e) {
                 System.out.println("命令行参数解析失败: " + e);
             }
         };
-        Runnable restInitFun = () -> {
-            restTemplate.getInterceptors().add(new BasicAuthenticationInterceptor(username, password));
-
-            headers.set("Authorization", authorization);
-            headers.set("XMLHttpRequest", "XMLHttpRequest");
-            headers.set("X-Transmission-Session-Id", sessionId);
-            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        };
         argsInitFun.accept(args);
-        restInitFun.run();
     }
 
     public static void main(String[] args) {
         System.out.println(Arrays.toString(args));
 
-        init(args);
+        initArgs(args);
+
+        initHeaders(url);
 
         handler(url, passkey);
     }
