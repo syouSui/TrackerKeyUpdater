@@ -64,6 +64,7 @@ public class TrackerKeyUpdaterApplication {
         return isResponseOk.test(responseEntity);
     }
 
+    @Deprecated
     private static Boolean modifyAnnounceByCurl(String url, String payload) {
         System.out.println("----------------------" + payload);
         String[] command = {
@@ -75,7 +76,7 @@ public class TrackerKeyUpdaterApplication {
                 "--data-raw", payload
         };
 
-        Boolean res = true;
+        boolean res = true;
 
         try {
             // 使用 ProcessBuilder 执行命令
@@ -125,14 +126,14 @@ public class TrackerKeyUpdaterApplication {
                                             .addOption("username", true, "用户参数")
                                             .addOption("password", true, "密码参数")
                                             .addOption("Authorization", true, "Authorization")
-                                            .addOption("X-Transmission-Session-Id", true, "X-Transmission-Session-Id"),
+                                            .addOption("XTransmissionSessionId", true, "X-Transmission-Session-Id"),
                                args);
                 url           = cmd.getOptionValue("url");
                 passkey       = cmd.getOptionValue("passkey");
                 username      = cmd.getOptionValue("username");
                 password      = cmd.getOptionValue("password");
                 authorization = cmd.getOptionValue("Authorization");
-                sessionId     = cmd.getOptionValue("X-Transmission-Session-Id");
+                sessionId     = cmd.getOptionValue("XTransmissionSessionId");
             } catch (ParseException e) {
                 System.out.println("命令行参数解析失败: " + e);
             }
