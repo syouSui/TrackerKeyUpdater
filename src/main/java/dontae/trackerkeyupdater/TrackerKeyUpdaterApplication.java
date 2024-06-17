@@ -1,5 +1,6 @@
 package dontae.trackerkeyupdater;
 
+import dontae.trackerkeyupdater.po.Response;
 import org.apache.commons.cli.*;
 import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.http.*;
@@ -27,6 +28,13 @@ public class TrackerKeyUpdaterApplication {
                         ObjectUtils.isNotEmpty(response.getBody()) &&
                         SUCCESS_FLAG.equals(response.getBody().getResult());
 
+    /**
+     * 构造修改的请求参数
+     *
+     * @param torrent 种子
+     * @param passkey passkey
+     * @return 构造修改参数
+     */
     private static String generateFormData(Response.Arguments.Torrent torrent, String passkey) {
         String tracker = torrent.getTrackerStats().get(0).getAnnounce();
         return String.format("""
@@ -37,6 +45,12 @@ public class TrackerKeyUpdaterApplication {
                              passkey);
     }
 
+    /**
+     * 查询种子列表
+     *
+     * @param url rpc地址
+     * @return 种子对象列表
+     */
     private static List<Response.Arguments.Torrent> listTorrents(String url) {
         ResponseEntity<Response> responseEntity = restTemplate.postForEntity(
                 url,
@@ -50,6 +64,13 @@ public class TrackerKeyUpdaterApplication {
                 List.of();
     }
 
+    /**
+     * 修改逻辑
+     *
+     * @param url     rpc地址
+     * @param payload post表单参数
+     * @return 是否修改成功
+     */
     private static Boolean modifyAnnounceByRest(String url, String payload) {
         ResponseEntity<Response> responseEntity = restTemplate.postForEntity(
                 url,
@@ -58,6 +79,12 @@ public class TrackerKeyUpdaterApplication {
         return isResponseOk.test(responseEntity);
     }
 
+    /**
+     * 调用处理逻辑
+     *
+     * @param url     rpc地址
+     * @param passkey 新的密钥
+     */
     private static void handler(String url, String passkey) {
         listTorrents(url).parallelStream()
                          .filter(t -> ERROR_TRACKER_CONTENT.equals(t.getErrorString()))
@@ -67,6 +94,11 @@ public class TrackerKeyUpdaterApplication {
                          });
     }
 
+    /**
+     * 初始化请请求头, 重点是 X-Transmission-Session-Id
+     *
+     * @param url rpc地址
+     */
     private static void initHeaders(String url) {
         restTemplate.getInterceptors().add(new BasicAuthenticationInterceptor(username, password));
         headers.set("XMLHttpRequest", "XMLHttpRequest");
@@ -91,6 +123,11 @@ public class TrackerKeyUpdaterApplication {
         headers.set("X-Transmission-Session-Id", sessionId);
     }
 
+    /**
+     * 读取参数
+     *
+     * @param args Java -jar 传入的参数
+     */
     private static void initArgs(String[] args) {
         Consumer<String[]> argsInitFun = s -> {
             try {
@@ -100,10 +137,10 @@ public class TrackerKeyUpdaterApplication {
                                             .addOption("username", true, "用户参数")
                                             .addOption("password", true, "密码参数"),
                                args);
-                url           = cmd.getOptionValue("url");
-                passkey       = cmd.getOptionValue("passkey");
-                username      = cmd.getOptionValue("username");
-                password      = cmd.getOptionValue("password");
+                url      = cmd.getOptionValue("url");
+                passkey  = cmd.getOptionValue("passkey");
+                username = cmd.getOptionValue("username");
+                password = cmd.getOptionValue("password");
             } catch (ParseException e) {
                 System.out.println("命令行参数解析失败: " + e);
             }

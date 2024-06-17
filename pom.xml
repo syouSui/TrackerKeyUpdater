@@ -5,7 +5,7 @@
 
     <properties>
         <project.name>TrackerKeyUpdater</project.name>
-        <project.version>1.2.0</project.version>
+        <project.version>1.2.1</project.version>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <lombok.version>1.18.24</lombok.version>
