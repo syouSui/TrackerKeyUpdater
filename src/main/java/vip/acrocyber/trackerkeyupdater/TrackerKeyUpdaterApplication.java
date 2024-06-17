@@ -64,50 +64,6 @@ public class TrackerKeyUpdaterApplication {
         return isResponseOk.test(responseEntity);
     }
 
-    @Deprecated
-    private static Boolean modifyAnnounceByCurl(String url, String payload) {
-        System.out.println("----------------------" + payload);
-        String[] command = {
-                "curl",
-                url,
-                "-H", "Authorization: " + authorization,
-                "-H", MediaType.APPLICATION_FORM_URLENCODED_VALUE,
-                "-H", "X-Transmission-Session-Id: " + sessionId,
-                "--data-raw", payload
-        };
-
-        boolean res = true;
-
-        try {
-            // 使用 ProcessBuilder 执行命令
-            ProcessBuilder processBuilder = new ProcessBuilder(command);
-            Process        process        = processBuilder.start();
-
-            // 读取命令执行的输出
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String         line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
-            }
-
-            // 读取命令执行的错误输出
-            BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            while ((line = errorReader.readLine()) != null) {
-                res = false;
-                System.err.println(line);
-            }
-
-            // 等待命令执行完毕
-            int exitCode = process.waitFor();
-            System.out.println("Exit code: " + exitCode);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return res;
-    }
-
     private static void handler(String url, String passkey) {
         listTorrents(url).parallelStream()
                          .filter(t -> ERROR_TRACKER_CONTENT.equals(t.getErrorString()))
